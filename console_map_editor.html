@@ -1,0 +1,293 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans)}
+#app{padding:1rem;max-width:900px;margin:0 auto}
+.toolbar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;padding:12px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);margin-bottom:12px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:12px;color:var(--color-text-secondary)}
+.field input[type=number]{width:72px}
+.color-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.swatch{width:22px;height:22px;border-radius:4px;border:2px solid transparent;cursor:pointer;flex-shrink:0;transition:transform .1s}
+.swatch:hover{transform:scale(1.15)}
+.swatch.active{border-color:var(--color-text-primary)}
+#grid-wrap{overflow:auto;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);background:#fff;max-height:520px;cursor:crosshair;user-select:none}
+#grid-canvas{display:block;image-rendering:pixelated}
+.bottom-bar{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+#output-box{width:100%;height:110px;font-family:var(--font-mono);font-size:12px;resize:none;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:8px;margin-top:8px;background:var(--color-background-secondary);color:var(--color-text-primary)}
+.badge{font-size:11px;padding:2px 8px;border-radius:var(--border-radius-md);background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);color:var(--color-text-secondary)}
+.sep{width:1px;height:28px;background:var(--color-border-tertiary);flex-shrink:0;align-self:flex-end}
+.fill-swatch{width:20px;height:20px;border-radius:3px;border:1.5px solid var(--color-border-secondary);display:inline-block;vertical-align:middle;flex-shrink:0}
+.fill-group{display:flex;align-items:center;gap:6px}
+.check-row{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--color-text-primary);cursor:pointer}
+.check-row input[type=checkbox]{width:15px;height:15px;cursor:pointer;accent-color:var(--color-text-primary)}
+</style>
+
+<div id="app">
+  <h2 style="font-size:16px;font-weight:500;color:var(--color-text-primary);margin-bottom:10px"><i class="ti ti-map-2" aria-hidden="true"></i> Console Map Editor</h2>
+
+  <div class="toolbar">
+    <div class="field">
+      <label>Width (1–500)</label>
+      <input type="number" id="inp-w" min="1" max="500" value="80">
+    </div>
+    <div class="field">
+      <label>Height (1–500)</label>
+      <input type="number" id="inp-h" min="1" max="500" value="80">
+    </div>
+    <button id="apply-btn" style="align-self:flex-end"><i class="ti ti-refresh" aria-hidden="true"></i> Apply</button>
+
+    <div class="sep"></div>
+
+    <div class="field" style="flex:1;min-width:220px">
+      <label>Draw color (<span id="cur-name">White</span> = <span id="cur-val">15</span>)</label>
+      <div class="color-row" id="swatches"></div>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="field">
+      <label>Brush size</label>
+      <select id="brush-select" style="font-size:13px">
+        <option value="1">1×1</option>
+        <option value="2">2×2</option>
+        <option value="3">3×3</option>
+        <option value="4">4×4</option>
+        <option value="5">5×5</option>
+        <option value="10">10×10</option>
+        <option value="20">20×20</option>
+        <option value="30">30×30</option>
+      </select>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="field">
+      <label>Fill all with</label>
+      <div class="fill-group">
+        <div class="fill-swatch" id="fill-preview" style="background:#FFFFFF"></div>
+        <select id="fill-select" style="font-size:13px"></select>
+        <button id="fill-btn" style="font-size:13px"><i class="ti ti-paint" aria-hidden="true"></i> Fill</button>
+      </div>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="field" style="align-self:flex-end;padding-bottom:2px">
+      <label>Pixel shape</label>
+      <label class="check-row">
+        <input type="checkbox" id="console-mode">
+        Console proportions
+      </label>
+    </div>
+  </div>
+
+  <div id="grid-wrap">
+    <canvas id="grid-canvas"></canvas>
+  </div>
+
+  <div class="bottom-bar">
+    <button id="gen-btn"><i class="ti ti-code" aria-hidden="true"></i> Generate C++ matrix</button>
+    <span id="status" class="badge">Ready</span>
+    <button id="copy-btn" style="margin-left:auto" disabled><i class="ti ti-copy" aria-hidden="true"></i> Copy</button>
+  </div>
+  <textarea id="output-box" readonly placeholder="Click 'Generate C++ matrix' to export..."></textarea>
+</div>
+
+<script>
+const COLORS=[
+  {name:"Black",val:0,hex:"#000000"},
+  {name:"DarkBlue",val:1,hex:"#000080"},
+  {name:"DarkGreen",val:2,hex:"#008000"},
+  {name:"DarkCyan",val:3,hex:"#008080"},
+  {name:"DarkRed",val:4,hex:"#800000"},
+  {name:"DarkMagenta",val:5,hex:"#800080"},
+  {name:"DarkYellow",val:6,hex:"#808000"},
+  {name:"Gray",val:7,hex:"#C0C0C0"},
+  {name:"DarkGray",val:8,hex:"#808080"},
+  {name:"Blue",val:9,hex:"#0000FF"},
+  {name:"Green",val:10,hex:"#00FF00"},
+  {name:"Cyan",val:11,hex:"#00FFFF"},
+  {name:"Red",val:12,hex:"#FF0000"},
+  {name:"Magenta",val:13,hex:"#FF00FF"},
+  {name:"Yellow",val:14,hex:"#FFFF00"},
+  {name:"White",val:15,hex:"#FFFFFF"}
+];
+
+let W=80,H=80,selectedColor=15,isDrawing=false,consoleMode=false,brushSize=1;
+let grid=null;
+const BASE=8;
+
+const canvas=document.getElementById("grid-canvas");
+const ctx=canvas.getContext("2d");
+
+function cellW(){return BASE}
+function cellH(){return consoleMode?BASE*1.9:BASE}
+
+function initGrid(w,h,keepOld){
+  const old=grid,oW=W,oH=H;
+  grid=new Uint8Array(w*h).fill(15);
+  if(keepOld&&old){
+    const minW=Math.min(w,oW),minH=Math.min(h,oH);
+    for(let y=0;y<minH;y++)for(let x=0;x<minW;x++)grid[y*w+x]=old[y*oW+x];
+  }
+  W=w;H=h;
+  resizeCanvas();
+  drawAll();
+}
+
+function resizeCanvas(){
+  canvas.width=Math.round(W*cellW());
+  canvas.height=Math.round(H*cellH());
+}
+
+function drawAll(){
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++)drawCell(x,y);
+  drawGrid();
+}
+
+function drawCell(x,y){
+  const cw=cellW(),ch=cellH();
+  ctx.fillStyle=COLORS[grid[y*W+x]].hex;
+  ctx.fillRect(Math.round(x*cw),Math.round(y*ch),Math.ceil(cw),Math.ceil(ch));
+}
+
+function drawGrid(){
+  const cw=cellW(),ch=cellH();
+  if(cw<4&&ch<4)return;
+  ctx.strokeStyle="rgba(0,0,0,0.08)";
+  ctx.lineWidth=0.5;
+  for(let x=0;x<=W;x++){ctx.beginPath();ctx.moveTo(Math.round(x*cw),0);ctx.lineTo(Math.round(x*cw),canvas.height);ctx.stroke()}
+  for(let y=0;y<=H;y++){ctx.beginPath();ctx.moveTo(0,Math.round(y*ch));ctx.lineTo(canvas.width,Math.round(y*ch));ctx.stroke()}
+}
+
+function getCellFromEvent(e){
+  const r=canvas.getBoundingClientRect();
+  const scaleX=canvas.width/r.width;
+  const scaleY=canvas.height/r.height;
+  const cx=Math.floor((e.clientX-r.left)*scaleX/cellW());
+  const cy=Math.floor((e.clientY-r.top)*scaleY/cellH());
+  if(cx>=0&&cx<W&&cy>=0&&cy<H)return{x:cx,y:cy};
+  return null;
+}
+
+function paintBrush(cx,cy){
+  const half=Math.floor(brushSize/2);
+  const cw=cellW(),ch=cellH();
+  let changed=false;
+  for(let dy=-half;dy<brushSize-half;dy++){
+    for(let dx=-half;dx<brushSize-half;dx++){
+      const nx=cx+dx,ny=cy+dy;
+      if(nx<0||nx>=W||ny<0||ny>=H)continue;
+      if(grid[ny*W+nx]===selectedColor)continue;
+      grid[ny*W+nx]=selectedColor;
+      ctx.fillStyle=COLORS[selectedColor].hex;
+      ctx.fillRect(Math.round(nx*cw),Math.round(ny*ch),Math.ceil(cw),Math.ceil(ch));
+      changed=true;
+    }
+  }
+  if(changed)drawGrid();
+}
+
+function paint(e){
+  const p=getCellFromEvent(e);
+  if(!p)return;
+  paintBrush(p.x,p.y);
+}
+
+canvas.addEventListener("mousedown",e=>{isDrawing=true;paint(e)});
+canvas.addEventListener("mousemove",e=>{if(isDrawing)paint(e)});
+canvas.addEventListener("mouseup",()=>isDrawing=false);
+canvas.addEventListener("mouseleave",()=>isDrawing=false);
+canvas.addEventListener("touchstart",e=>{e.preventDefault();isDrawing=true;paint(e.touches[0])},{passive:false});
+canvas.addEventListener("touchmove",e=>{e.preventDefault();if(isDrawing)paint(e.touches[0])},{passive:false});
+canvas.addEventListener("touchend",()=>isDrawing=false);
+
+const swatchContainer=document.getElementById("swatches");
+COLORS.forEach(c=>{
+  const s=document.createElement("div");
+  s.className="swatch"+(c.val===15?" active":"");
+  s.style.background=c.hex;
+  if(c.val===0)s.style.outline="1px solid #ccc";
+  s.title=`${c.name} (${c.val})`;
+  s.addEventListener("click",()=>{
+    selectedColor=c.val;
+    document.querySelectorAll(".swatch").forEach(el=>el.classList.remove("active"));
+    s.classList.add("active");
+    document.getElementById("cur-name").textContent=c.name;
+    document.getElementById("cur-val").textContent=c.val;
+  });
+  swatchContainer.appendChild(s);
+});
+
+document.getElementById("brush-select").addEventListener("change",function(){
+  brushSize=parseInt(this.value);
+});
+
+const fillSelect=document.getElementById("fill-select");
+const fillPreview=document.getElementById("fill-preview");
+COLORS.forEach(c=>{
+  const opt=document.createElement("option");
+  opt.value=c.val;
+  opt.textContent=`${c.name} (${c.val})`;
+  if(c.val===15)opt.selected=true;
+  fillSelect.appendChild(opt);
+});
+fillSelect.addEventListener("change",()=>{
+  fillPreview.style.background=COLORS[parseInt(fillSelect.value)].hex;
+});
+document.getElementById("fill-btn").addEventListener("click",()=>{
+  const fv=parseInt(fillSelect.value);
+  grid.fill(fv);
+  ctx.fillStyle=COLORS[fv].hex;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  drawGrid();
+  document.getElementById("status").textContent=`Filled with ${COLORS[fv].name}`;
+});
+
+document.getElementById("console-mode").addEventListener("change",function(){
+  consoleMode=this.checked;
+  resizeCanvas();
+  drawAll();
+  document.getElementById("status").textContent=consoleMode?"Console proportions on":"Square pixels";
+});
+
+document.getElementById("apply-btn").addEventListener("click",()=>{
+  let nw=parseInt(document.getElementById("inp-w").value)||80;
+  let nh=parseInt(document.getElementById("inp-h").value)||80;
+  nw=Math.min(500,Math.max(1,nw));
+  nh=Math.min(500,Math.max(1,nh));
+  initGrid(nw,nh,true);
+  document.getElementById("status").textContent=`Grid: ${nw}×${nh}`;
+});
+
+document.getElementById("gen-btn").addEventListener("click",()=>{
+  const rows=[];
+  for(let y=0;y<H;y++){
+    const cells=[];
+    for(let x=0;x<W;x++)cells.push(grid[y*W+x]);
+    rows.push("{"+cells.join(",")+"}");
+  }
+  const full="{"+rows.join(", ")+"}";
+  const preview=rows.slice(0,3).join(", ");
+  const shown="{"+preview+(H>3?", ...":"")+"}"
+  const box=document.getElementById("output-box");
+  box.value=shown;
+  box._full=full;
+  document.getElementById("copy-btn").disabled=false;
+  document.getElementById("status").textContent=`${W}×${H} matrix ready`;
+});
+
+document.getElementById("copy-btn").addEventListener("click",()=>{
+  const box=document.getElementById("output-box");
+  const text=box._full||box.value;
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn=document.getElementById("copy-btn");
+    btn.innerHTML='<i class="ti ti-check" aria-hidden="true"></i> Copied!';
+    setTimeout(()=>btn.innerHTML='<i class="ti ti-copy" aria-hidden="true"></i> Copy',1500);
+  });
+});
+
+initGrid(80,80,false);
+document.getElementById("status").textContent="Grid: 80×80";
+</script>
